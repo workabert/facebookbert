@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { supabase } from '@/lib/supabase';
 import Image from 'next/image';
 
 interface Post {
@@ -11,39 +12,62 @@ interface Post {
   name: string;
   message: string;
   timestamp: string;
+  imageUrl?: string;
 }
 
 export default function Home() {
   const [message, setMessage] = useState('');
   const [posts, setPosts] = useState<Post[]>([]);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('wall-posts');
-        const saved = stored ? JSON.parse(stored) : [];
-        setPosts(saved);
-      } catch (error) {
-        console.error('Failed to parse wall-posts:', error);
-        setPosts([]);
-      }
-    }
+    const stored = localStorage.getItem('wall-posts');
+    setPosts(stored ? JSON.parse(stored) : []);
   }, []);
 
-  const handleShare = () => {
+  const handleShare = async () => {
     if (!message.trim()) return;
+
+    let imageUrl = '';
+
+    if (imageFile) {
+      try {
+        setUploading(true);
+        const fileExt = imageFile.name.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+        const { data, error } = await supabase.storage
+          .from('wall-images')
+          .upload(fileName, imageFile);
+
+        if (error) throw error;
+
+        const { data: publicData } = supabase.storage
+          .from('wall-images')
+          .getPublicUrl(fileName);
+
+        imageUrl = publicData.publicUrl;
+      } catch (err) {
+        alert('Failed to upload photo. Please try again.');
+        return;
+      } finally {
+        setUploading(false);
+      }
+    }
 
     const newPost: Post = {
       id: crypto.randomUUID(),
       name: 'Robert',
       message: message.trim(),
       timestamp: new Date().toLocaleString(),
+      imageUrl,
     };
 
     const updated = [newPost, ...posts];
     setPosts(updated);
     localStorage.setItem('wall-posts', JSON.stringify(updated));
     setMessage('');
+    setImageFile(null);
   };
 
   return (
@@ -51,7 +75,7 @@ export default function Home() {
       {/* Sidebar */}
       <aside className="w-full md:w-1/4 bg-white rounded-2xl shadow-md p-4 flex flex-col items-center">
         <Image
-          src="/placeholder.jpg"
+          src="/robert.jpg"
           width={220}
           height={220}
           alt="Your photo"
@@ -68,7 +92,7 @@ export default function Home() {
         </div>
       </aside>
 
-      {/* Main Wall Feed */}
+      {/* Wall Feed */}
       <main className="flex-1 ml-0 md:ml-6 mt-6 md:mt-0 bg-white rounded-2xl shadow-md p-6">
         <Textarea
           value={message}
@@ -77,16 +101,25 @@ export default function Home() {
           maxLength={280}
           className="mb-2"
         />
-        <Button onClick={handleShare} disabled={!message.trim()} className="mb-6">
-          Share
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+          className="mb-2 block"
+        />
+        <Button onClick={handleShare} disabled={!message.trim() || uploading} className="mb-6">
+          {uploading ? 'Uploading...' : 'Share'}
         </Button>
 
         <div className="space-y-4">
-          {posts.map((post) => (
+          {posts.map(post => (
             <Card key={post.id}>
               <CardContent className="p-4">
                 <p className="font-semibold">{post.name}</p>
                 <p className="text-gray-800 mt-1">{post.message}</p>
+                {post.imageUrl && (
+                  <img src={post.imageUrl} alt="post" className="mt-3 rounded-lg w-full max-h-[400px] object-cover" />
+                )}
                 <span className="text-xs text-gray-400 block mt-2">{post.timestamp}</span>
               </CardContent>
             </Card>
