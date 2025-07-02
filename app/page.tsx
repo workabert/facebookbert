@@ -1,5 +1,8 @@
 'use client';
- 
+
+export default function Home() {
+  return <h1>Hello from Robert's Facebook</h1>;
+}
 import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
